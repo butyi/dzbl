@@ -543,6 +543,8 @@ It uses
 `Bootloader version = V0.00`  
 `ECU Serial number = 23102420202555AA`
 
+Echo is implemented for received characters. Break character cause MCU reset to jump back to bootloader.
+
 ## Todo
 
 ### Automatic ECUID

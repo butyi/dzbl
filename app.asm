@@ -112,7 +112,7 @@ loop
         ldhx    #$7FFF
 wait
         jsr     KickCop         ; Fresh watchdog
-        brset	5,$3C,scirxev   ; SCI1S1 no received byte
+        brset	5,$3C,scirxev   ; Framing error (break character)
 
         lda     #10
 wait2
@@ -126,7 +126,13 @@ wait2
 
         bra     loop
 scirxev
-        db      $AC             ; Illegal opcode to reset MCU
+        brset	1,$3C,resetecu  ; Framing error (break character) MCU reset needed to jump to bootloader
+        lda     $3F             ; Read data register
+        sta     $3F             ; Wrire data register, this is an echo actually
+        bra     loop
+resetecu
+        lda     $3F             ; Read data register to clear Framing error bit
+        db      $AC             ; Illegal opcode to reset MCU to jump to bootloader
 
 ; Init SCI to receive serial data with baud rate 57600
 SCI_Init

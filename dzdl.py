@@ -224,7 +224,7 @@ def ConnectDevice():
 
       if timer < time.perf_counter():
         f1.write("\nCon Tx: "+ba2hs(conn))
-        #ser.send_break() # Send brake to reset application software for auto connect without need of manual reset
+        ser.send_break() # Send brake to reset application software for auto connect without need of manual reset
         ser.write(conn)
         timer = time.perf_counter() + conn_period_s
 
