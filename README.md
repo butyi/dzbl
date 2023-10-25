@@ -591,6 +591,74 @@ This is free. You can do anything you want with it.
 While I am using Linux, I got so many support from free projects, I am happy if I can help for the community.
 By the way, this microcontroller is so old, to be honest, I do not really think anybody else than me will use this.
 
+## My USB Serial converters
+
+As summary, below baud rates are supported by all my USB Serial converters
+- 1M
+- 250k
+- 115200
+- 57600
+- 38400
+- 19200
+- 9600
+
+### Prolific Technology, Inc. PL2303HX
+
+Supported baud rates
+- 921600 (~1M tested)
+- 614400 (does not work)
+- 460800 (does not work)
+- 230400 (~250k tested)
+- 115200 (tested)
+- 57600 (tested)
+- 38400 (tested)
+- 28800
+- 19200 (tested)
+- 14400
+- 9600 (tested)
+
+### CP2102
+
+Supported baud rates (only dzbl specific)
+- 921600 (~1M baud tested with PL2303HX)
+- 500000
+- 250000
+- 115200
+- 57600
+- 38400
+- 19200
+- 9600
+
+### CH340G
+
+Supported baud rates (only dzbl specific)
+- 921600 (~1M baud tested with PL2303HX)
+- 230400 (~250k baud tested with PL2303HX)
+- 115200
+- 57600
+- 38400
+- 19200
+- 9600
+
+### FTDI
+
+Baud rate divisor must be calculated using the following formula:
+
+Integer Divisor + Sub-Integer Divisor = 3000000/Baud Rate
+
+where the Integer Divisor is any integer between 2 and 16384 and the Sub-Integer Divisor can be any one of 0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75 or 0.875.  Note that the FT8U232AM device will only support Sub-Integer Divisors of 0, 0.125, 0.25 and 0.5.
+
+Supported baud rates (only dzbl specific)
+- 1000000 (3)
+- 500000 (6)
+- 250000 (12)
+- 200000 (15)
+- 115200 (~26)
+- 57600 (~52.125)
+- 38400 (78.125)
+- 19200 (156.25)
+- 9600 (312.5)
+
 ## Keywords
 
 Motorola, Freescale, NXP, MC68HC9S08DZ60, 68HC9S08DZ60, HC9S08DZ60, MC9S08DZ60, 9S08DZ60, MC9S08DZ48, MC9S08DZ32, MC9S08DZ16, S08DZ16
