@@ -44,7 +44,6 @@ BL_VERSION      def     $FCF0   ; Bootloader version string with null terminatio
 SERIAL_NUMBER   def     $FCF8   ; Hardware serial number (6 bytes + 0x55AA)
 
 ; Bootloader services. These are functions to be called by 'jsr' and will return.
-        dw      KickCop         
 KickCop         def     $EB00   ; Function to fresh watchdog without damage any register
 MEM_doit        def     $EB04   ; Function to erase or write Flash or EEPROM
 
