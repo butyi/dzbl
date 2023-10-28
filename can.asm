@@ -20,22 +20,21 @@ can_idout       ds      4  	; 4 byte buffer for CAN ID calculation output with r
 ; Sample point = (1 + Tseg1)/(1 + Tseg1 + Tseg2)
 can_config      ; Config in EEPROM.
         org     EECANBAUD       
-;        db      $00,$01         ; Baud = 4MHz / 1 / (1+2+1) = 1M.    Sample point = (1+2)/(1+2+1) = 75%
-        db      $00,$05         ; Baud = 4MHz / 1 / (1+6+1) = 500k.  Sample point = (1+6)/(1+6+1) = 87.5% (Baud = 1M with fQuarz=8MHz)
-;        db      $01,$05         ; Baud = 4MHz / 2 / (1+6+1) = 250k.  Sample point = (1+6)/(1+6+1) = 87.5% (Baud = 500k with fQuarz=8MHz)
-;        db      $03,$05         ; Baud = 4MHz / 4 / (1+6+1) = 125k.  Sample point = (1+6)/(1+6+1) = 87.5% (Baud = 250k with fQuarz=8MHz)
-;        db      $07,$05         ; Baud = 4MHz / 8 / (1+6+1) = 62.5k. Sample point = (1+6)/(1+6+1) = 87.5% (Baud = 125k with fQuarz=8MHz)
+;        db      $00,$3A         ; Baud = 16MHz / 1 / (1+11+4) = 1M. Sample point = (1+11)/(1+11+4) = 87.5%
+        db      $01,$3A         ; Baud = 16MHz / 2 / (1+11+4) = 500k. Sample point = (1+11)/(1+11+4) = 87.5%
+;        db      $03,$3A         ; Baud = 16MHz / 4 / (1+11+4) = 250k. Sample point = (1+11)/(1+11+4) = 87.5%
+;        db      $07,$3A         ; Baud = 16MHz / 8 / (1+11+4) = 125k. Sample point = (1+11)/(1+11+4) = 87.5%
         org     can_config
 
 ; ------------------------------------------------------------------------------
 ; Freescale Controller Area Network (S08MSCANV1)
 ; Set up CAN for 500 kbit/s using 4 MHz external clock
 CAN_Init
-        ; MSCAN Enable, CLKSRC=0 use ext osc, BORM=0 auto busoff recovery, SLPAK=0 no sleep
-        lda     #CAN_CANE_      ; Auto BusOff recovery
+        ; MSCAN Enable, CLKSRC=1 use BusClk(16MHz), BORM=0 auto busoff recovery, SLPAK=0 no sleep
+        lda     #CAN_CANE_|CAN_CLKSRC_ 
         sta     CANCTL1
 
-        jsr     CAN_ChkInitMode
+        jsr     CAN_ChkEnterInit
         ais     #-2             ; Reserve two bytes in stack for baud rate bytes 
 
         ; Check two bytes in EEPROM. If any has value $FF, both to be forced to valid 500kbaud value.
@@ -54,8 +53,9 @@ can_btr_0_ok
 can_btr_1_ok
         tstx                    ; update CCR with value of X
         beq     can_btr_ok      ; jump if there was no $FF value in EEPROM
-        clr     1,sp            ; Default 500kbaud value 
-        lda     #$05            ; Default 500kbaud value 
+        lda     #$01            ; Default 500kbaud value 
+        sta     1,sp 
+        lda     #$3A            ; Default 500kbaud value 
         sta     2,sp
 can_btr_ok
         bne     can_btr_0_ok
@@ -108,37 +108,38 @@ can_btr_ok
         sta     CANIDMR7
 
         clr     can_datalen
-CAN_exitinit
+CAN_ExitInit
         ; Leave Initialization Mode
-        clra
+        lda     #CAN_INITRQ_
+        coma
+        and     CANCTL0
         sta     CANCTL0
 
         ; Wait for exit Initialization Mode Acknowledge
-ican2
+CAN_ChkExitInit
         lda     CANCTL1
         and     #CAN_INITAK_
-        bne     ican2
+        bne     CAN_ChkExitInit
         
         rts
 
-CAN_GoInitMode
+CAN_EnterInit
         ; Request init mode
-        lda     #CAN_INITRQ_
+        lda     CANCTL0
+        ora     #CAN_INITRQ_
         sta     CANCTL0
-CAN_ChkInitMode
+CAN_ChkEnterInit
         ; Wait for Initialization Mode Acknowledge
         lda     CANCTL1
         and     #CAN_INITAK_
-        beq     CAN_ChkInitMode
+        beq     CAN_ChkEnterInit
         rts
 
 CAN_Deinit
-        bsr     CAN_GoInitMode
-        ; Reset value into all registers
+        bsr     CAN_EnterInit
+        ; Reset value into all registers, except CANCTL1
         lda     #$01
         sta     CANCTL0
-        lda     #$11
-        sta     CANCTL1
         lda     #$07
         sta     CANTFLG
         sta     CANTBSEL
@@ -151,7 +152,7 @@ CAN_Deinit
         sta     CANTARQ
         sta     CANIDAC
         sta     CANMISC
-        bra     CAN_exitinit
+        bra     CAN_ExitInit
 
 ; Calculate ID register bytes from simple 29bit value
 CAN_CalcID
