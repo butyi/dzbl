@@ -19,12 +19,10 @@ FINGERPR        def     $17F0   ; Fingerprint of bootloader usage (usually user 
 
 EECANBAUD       def     $17E8   ; CAN BaudRate settings in EEPROM
 ;        org     EECANBAUD
-;        db      $FF,$FF         ; Default 500kbaud is used, but can be changed by EEPROM update by application
-;        db      $00,$01         ; Baud = 4MHz / 1 / (1+2+1) = 1M.    Sample point = (1+2)/(1+2+1) = 75%
-;        db      $00,$05         ; Baud = 4MHz / 1 / (1+6+1) = 500k.  Sample point = (1+6)/(1+6+1) = 87.5% (Baud = 1M with fQuarz=8MHz)
-;        db      $01,$05         ; Baud = 4MHz / 2 / (1+6+1) = 250k.  Sample point = (1+6)/(1+6+1) = 87.5% (Baud = 500k with fQuarz=8MHz)
-;        db      $03,$05         ; Baud = 4MHz / 4 / (1+6+1) = 125k.  Sample point = (1+6)/(1+6+1) = 87.5% (Baud = 250k with fQuarz=8MHz)
-;        db      $07,$05         ; Baud = 4MHz / 8 / (1+6+1) = 62.5k. Sample point = (1+6)/(1+6+1) = 87.5% (Baud = 125k with fQuarz=8MHz)
+;        db      $00,$3A         ; Baud = 16MHz / 1 / (1+11+4) = 1M. Sample point = (1+11)/(1+11+4) = 87.5%
+;        db      $01,$3A         ; Baud = 16MHz / 2 / (1+11+4) = 500k. Sample point = (1+11)/(1+11+4) = 87.5%
+;        db      $03,$3A         ; Baud = 16MHz / 4 / (1+11+4) = 250k. Sample point = (1+11)/(1+11+4) = 87.5%
+;        db      $07,$3A         ; Baud = 16MHz / 8 / (1+11+4) = 125k. Sample point = (1+11)/(1+11+4) = 87.5%
 
 EESCIBAUD       def     $17E0   ; SCI BaudRate setting in EEPROM
 ;        org     EESCIBAUD
