@@ -64,6 +64,8 @@ start
         ; PCB_Init was called by bootloader since its vector is stored at $FFA2. Not need to be called here again.
         bsr     SCI_Init        ; Init SCI. It is needed, because botloader leave SCI in uninicialized state.
 
+        jsr     CAN_Init
+
         cli                     ; Enable interrupts
 
         ; Increase EEStartCnt in EEPROM by one
@@ -129,6 +131,7 @@ scirxev
         brset	1,$3C,resetecu  ; Framing error (break character) MCU reset needed to jump to bootloader
         lda     $3F             ; Read data register
         sta     $3F             ; Wrire data register, this is an echo actually
+        jsr     CAN_SendA       ; Send character in a CAN message
         bra     loop
 resetecu
         lda     $3F             ; Read data register to clear Framing error bit
@@ -241,6 +244,125 @@ sciw_loop
         lda     #$0A
         jsr     SCI_putc
 
+        rts
+
+
+CAN_BASE        def     $1880
+CANCTL0         equ     CAN_BASE+$00,1      ;MSCAN Control 0 Register
+CANCTL1         equ     CAN_BASE+$01,1      ;MSCAN Control 1 Register
+CANBTR0         equ     CAN_BASE+$02,1      ;MSCAN Bus Timing Register 0
+CANBTR1         equ     CAN_BASE+$03,1      ;MSCAN Bus Timing Register 1
+CANRFLG         equ     CAN_BASE+$04,1      ;MSCAN Receiver Flag Register
+CANTBSEL        equ     CAN_BASE+$0A,1      ;MSCAN Transmit Buffer Selection
+CANTIDR         equ     CAN_BASE+$30,1      ;MSCAN 0 Transmit Identifier Register 0
+CANTDSR         equ     CAN_BASE+$34,1      ;MSCAN Transmit Data Segment Register 0
+CANTDLR         equ     CAN_BASE+$3C,1      ;MSCAN Transmit Data Length Register
+CANTFLG         equ     CAN_BASE+$06,1      ;MSCAN Transmitter Flag Register
+
+
+CAN_Init
+        ; MSCAN Enable, CLKSRC=1 use BusClk(16MHz), BORM=0 auto busoff recovery, SLPAK=0 no sleep
+        lda     #$C0            ; CAN_CLKSRC 
+        sta     CANCTL1
+
+        ; Enter into Initialization Mode
+        bsr     CAN_EnterInit
+
+        ais     #-2             ; Reserve two bytes in stack for baud rate bytes 
+
+        ; Use same baud rate like bootloader
+        ; Check two bytes in EEPROM. If any has value $FF, both to be forced to valid 500kbaud value.
+        clrx
+        lda     EECANBAUD+0     ; Read value from EEPROM
+        sta     1,sp            ; Save value for later use
+        coma                    ; convert $FF to $00
+        bne     can_btr_0_ok    ; jump id not zero, fo value is not $FF
+        incx                    ; Count number of $FF value in X 
+can_btr_0_ok
+        lda     EECANBAUD+1     ; Read value from EEPROM
+        sta     2,sp            ; Save value for later use
+        coma                    ; convert $FF to $00
+        bne     can_btr_1_ok    ; jump id not zero, fo value is not $FF
+        incx                    ; Count number of $FF value in X 
+can_btr_1_ok
+        tstx                    ; update CCR with value of X
+        beq     can_btr_ok      ; jump if there was no $FF value in EEPROM
+        lda     #$01            ; Default 500kbaud value 
+        sta     1,sp 
+        lda     #$3A            ; Default 500kbaud value 
+        sta     2,sp
+can_btr_ok
+        bne     can_btr_0_ok
+        clra                    ; Default 500kbaud value 
+
+        ; SJW = 1...4 Tq, Prescaler value = 1...64
+        lda     1,sp
+        sta     CANBTR0
+        
+        ; One sample per bit, Tseg2 = 1...8 Tq, Tseg1 = 1...16 Tq
+        lda     2,sp
+        sta     CANBTR1
+
+        ais     #2              ; Free up two baud rate bytes from stack  
+
+        ; Leave Initialization Mode
+        bsr     CAN_ExitInit
+        lda     #$FF
+
+; Send message with A register
+CAN_SendA
+        psha        
+        ; Select first buffer
+        lda     #1
+        sta     CANTBSEL
+
+        ; Set ID
+        lda     #$FF
+        sta     CANTIDR+0
+        sta     CANTIDR+1        ; Set IDE and SRR
+        sta     CANTIDR+2
+        and     #$FE            ; Clear RTR bit
+        sta     CANTIDR+3
+        
+        ; Set message data
+        pula
+        sta     CANTDSR+0
+
+        ; Set data length
+        lda     #1
+        sta     CANTDLR
+
+        ; Transmit the message
+        lda     CANTBSEL
+        sta     CANTFLG
+
+        rts
+
+CAN_ExitInit
+        ; Leave Initialization Mode
+        lda     #$01
+        coma
+        and     CANCTL0
+        sta     CANCTL0
+
+        ; Wait for exit Initialization Mode Acknowledge
+CAN_ChkExitInit
+        lda     CANCTL1
+        and     #$01
+        bne     CAN_ChkExitInit
+        
+        rts
+
+CAN_EnterInit
+        ; Request init mode
+        lda     CANCTL0
+        ora     #$01
+        sta     CANCTL0
+CAN_ChkEnterInit
+        ; Wait for Initialization Mode Acknowledge
+        lda     CANCTL1
+        and     #$01
+        beq     CAN_ChkEnterInit
         rts
 
 
