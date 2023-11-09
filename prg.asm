@@ -147,7 +147,7 @@ entry
         sei
 
 	; Init Stack       
-        ldhx    #XRAM_END
+        ldhx    #XRAM_END+1     ; TXS instruction includes an automatic decrement on the value during the transfer.
         txs
 
 Stack
