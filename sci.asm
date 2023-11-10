@@ -80,11 +80,7 @@ SCI_putb
 ; Prints a byte in hexa format from A and a new line character.
 SCI_putbn
         bsr     SCI_putb
-        psha
-SCI_putn
-        lda     #$0A
-        bsr     SCI_putc
-        pula
+        bsr     SCI_putn
         rts
         
 ; Prints HX in hexa format and a new line character.
@@ -96,7 +92,7 @@ SCI_puthxn
         pula
         bsr     SCI_putbn
         rts
-        
+SCI_putn
         psha
         lda     #$0A
         bsr     SCI_putc

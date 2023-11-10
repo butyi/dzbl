@@ -82,6 +82,8 @@ wr_data         ds      $80  	; 128 byte write data buffer.
         jmp     KickCop         ; Fresh watchdog without damage any register
         align 4
         jmp     MEM_doit        ; Address of non-volatile memory write routine
+        align 4
+        jmp     CAN_SetID       ; Convert Phisical CAN ID to ID register value
         
 bl_start_addr
 ;-----------------------------------------

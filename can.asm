@@ -8,9 +8,6 @@ can_cserr       ds      1  	; Checksum error flag
 can_derr        ds      1  	; Data error flag
 packetnumber    ds      1       ; Count number of received data packets for checksum calculation
 
-can_idin        ds      4  	; 4 byte buffer for CAN ID calculation input in simple ID 
-can_idout       ds      4  	; 4 byte buffer for CAN ID calculation output with register bit mapping 
-
         #ROM
 
 
@@ -19,7 +16,7 @@ can_idout       ds      4  	; 4 byte buffer for CAN ID calculation output with r
 ; Baud = fCANCLK / Prescaler / (1 + Tseg1 + Tseg2)
 ; Sample point = (1 + Tseg1)/(1 + Tseg1 + Tseg2)
 can_config      ; Config in EEPROM.
-        org     EECANBAUD       
+        org     EECANBAUD
 ;        db      $00,$3A         ; Baud = 16MHz / 1 / (1+11+4) = 1M. Sample point = (1+11)/(1+11+4) = 87.5%
         db      $01,$3A         ; Baud = 16MHz / 2 / (1+11+4) = 500k. Sample point = (1+11)/(1+11+4) = 87.5%
 ;        db      $03,$3A         ; Baud = 16MHz / 4 / (1+11+4) = 250k. Sample point = (1+11)/(1+11+4) = 87.5%
@@ -31,11 +28,11 @@ can_config      ; Config in EEPROM.
 ; Set up CAN for 500 kbit/s using 4 MHz external clock
 CAN_Init
         ; MSCAN Enable, CLKSRC=1 use BusClk(16MHz), BORM=0 auto busoff recovery, SLPAK=0 no sleep
-        lda     #CAN_CANE_|CAN_CLKSRC_ 
+        lda     #CAN_CANE_|CAN_CLKSRC_
         sta     CANCTL1
 
         jsr     CAN_ChkEnterInit
-        ais     #-2             ; Reserve two bytes in stack for baud rate bytes 
+        ais     #-2             ; Reserve two bytes in stack for baud rate bytes
 
         ; Check two bytes in EEPROM. If any has value $FF, both to be forced to valid 500kbaud value.
         clrx
@@ -43,56 +40,65 @@ CAN_Init
         sta     1,sp            ; Save value for later use
         coma                    ; convert $FF to $00
         bne     can_btr_0_ok    ; jump id not zero, fo value is not $FF
-        incx                    ; Count number of $FF value in X 
+        incx                    ; Count number of $FF value in X
 can_btr_0_ok
         lda     EECANBAUD+1     ; Read value from EEPROM
         sta     2,sp            ; Save value for later use
         coma                    ; convert $FF to $00
         bne     can_btr_1_ok    ; jump id not zero, fo value is not $FF
-        incx                    ; Count number of $FF value in X 
+        incx                    ; Count number of $FF value in X
 can_btr_1_ok
         tstx                    ; update CCR with value of X
         beq     can_btr_ok      ; jump if there was no $FF value in EEPROM
-        lda     #$01            ; Default 500kbaud value 
-        sta     1,sp 
-        lda     #$3A            ; Default 500kbaud value 
+        lda     #$01            ; Default 500kbaud value
+        sta     1,sp
+        lda     #$3A            ; Default 500kbaud value
         sta     2,sp
 can_btr_ok
         bne     can_btr_0_ok
-        clra                    ; Default 500kbaud value 
+        clra                    ; Default 500kbaud value
 
         ; SJW = 1...4 Tq, Prescaler value = 1...64
         lda     1,sp
         sta     CANBTR0
-        
+
         ; One sample per bit, Tseg2 = 1...8 Tq, Tseg1 = 1...16 Tq
         lda     2,sp
         sta     CANBTR1
 
-        ais     #2              ; Free up two baud rate bytes from stack  
+        ais     #2              ; Free up two baud rate bytes from stack
 
         ; Acceptance filter for Rx
         clra
         sta     CANIDAC         ; Two 32-bit acceptance filters
 
         ; 0-3: 1CDA0B55 (target specific), 4-7: 1CDAFF55 (broadcast)
-        ldhx    #$1CDA
-        sthx    can_idin
+        ais     #-4
+        lda     #$1C
+        sta     1,sp
+        lda     #$DA
+        sta     2,sp
         lda     ECUID
-        sta     can_idin+2
-        clr     can_idin+3     ; Source address (diag tool, can be any value, doesn't matter here)
-        jsr     CAN_CalcID
-        ldhx    can_idout
+        sta     3,sp
+        clr     4,sp            ; Source address (diag tool, can be any value, doesn't matter here)
+        jsr     CAN_SetID
+        pulhx
         sthx    CANIDAR0
-        ldhx    can_idout+2
+        pulhx
         sthx    CANIDAR2
 
-        lda     #$FF
-        sta     can_idin+2
-        bsr     CAN_CalcID        
-        ldhx    can_idout
+        ais     #-4
+        lda     #$1C
+        sta     1,sp
+        lda     #$DA
+        sta     2,sp
+        lda     #$FF            ; Broadcast ID
+        sta     3,sp
+        clr     4,sp            ; Source address (diag tool, can be any value, doesn't matter here)
+        bsr     CAN_SetID
+        pulhx
         sthx    CANIDAR4
-        ldhx    can_idout+2
+        pulhx
         sthx    CANIDAR6
 
         clra                    ; Only this meesage
@@ -120,7 +126,7 @@ CAN_ChkExitInit
         lda     CANCTL1
         and     #CAN_INITAK_
         bne     CAN_ChkExitInit
-        
+
         rts
 
 CAN_EnterInit
@@ -154,40 +160,69 @@ CAN_Deinit
         sta     CANMISC
         bra     CAN_ExitInit
 
-; Calculate ID register bytes from simple 29bit value
-CAN_CalcID
-        ; simple 29 bits        6,sp        5,sp        4,sp        3,sp
+; Calculates ID register bytes (RAW) from simple 29bit value (PHYS) to set ID registers
+CAN_SetID
+        ;
+        ; simple 29 bits        3,sp        4,sp        5,sp        6,sp
         ;                       ---3 3333   2222 2222   1111 1111   0000 0000
         ; register bytes
         ;                       3333 3222   222s i221   1111 1110   0000 000r
-        ldhx    can_idin
-        lslhx
-        lslhx
-        lslhx
-        pshh
-        pula
-        sta     can_idout
-        
-        ldhx    can_idin+1
-        lslhx
-        pshh
-        lda     1,sp
+
+        ; sp1,2 are return address
+
+        ; Prio (bit24-3)
+        lda     3,sp
+        lsla
+        lsla
+        lsla
+        and     #$F8
+        sta     3,sp
+
+        lda     4,sp
+        nsa
+        lsra
         and     #$07
-        sta     can_idout+1
-        pula
+        ora     3,sp
+        sta     3,sp
+
+        ; PGN (bit16-23)
+        lda     4,sp
+        lsla
+        tax
         lsla
         lsla
         and     #$E0
-        ora     can_idout+1
+        sta     4,sp
+
+        txa
+        and     #$06
+        ora     4,sp
+        sta     4,sp
+
+        lda     5,sp
+        rola
+        rola
+        and     #$01
+        ora     4,sp
         ora     #$18            ; Set SSR and IDE bits
-        sta     can_idout+1
-        
-        ldhx    can_idin+2
-        lslhx
-        pshh
-        pula
-        sta     can_idout+2
-        stx     can_idout+3     ; Leave RTR bit null
+        sta     4,sp
+
+        ; TA (bit7-15)
+        lda     5,sp
+        lsla
+        and     #$FE
+        sta     5,sp
+        lda     6,sp
+        rola
+        rola
+        and     #$01
+        ora     5,sp
+        sta     5,sp
+
+        ; SA (bit0-7)
+        lda     6,sp
+        lsla
+        sta     6,sp            ; Leave RTR bit cleared
 
         rts
 
@@ -198,7 +233,7 @@ CAN_RxHandler
         lda     CANRIDR3
         rora                    ; shift right: drop out RTR (mask 0x01), move carry into MSB (mask 0x80)
         sta     diag_sa
-        
+
         lda     CANIDAC         ; Check which acceptance hit happened (0 target specific, 1 broadcast)
         and     #CAN_IDHIT2_|CAN_IDHIT1_|CAN_IDHIT0_
         jne     cr_broadcast
@@ -217,7 +252,7 @@ CAN_RxHandler
         beq     cr_write        ; Write memory
         cmp     #6
         jeq     cr_wrfp         ; Write fingerprint
-c_errcodeuc        
+c_errcodeuc
         lda     #$07            ; Unknown command or DLC
         jsr     CAN_anserr
         rts
@@ -241,7 +276,7 @@ cr_erase
         jsr     can_readaddr
         clr     wr_datat        ; Length for erase NVM is always 0
         jsr     nvm_doit        ; Do the erase, return value is 0 if success
-        jsr     CAN_anserr      ; Report error or success code 
+        jsr     CAN_anserr      ; Report error or success code
         rts
 
 cr_lenlarge
@@ -249,7 +284,7 @@ cr_lenlarge
         bra     cr_ans
 cr_lennull
         lda     #$05            ; error code of zero lentgh write
-cr_ans        
+cr_ans
         jsr     CAN_anserr
         rts
 
@@ -277,17 +312,17 @@ cr_write
 crw_dataloop                    ; Wait here for next data message
         jsr     RTC_Handle
         beq     crw_timeout     ; Jump if time spent
-        
+
         lda     CANRFLG         ; Check if CAN message received
         and     #CAN_RXF_
         beq     crw_dataloop    ; Wait if not
-        
+
         tim                     ; pull up timer
         lda     CANRDLR         ; Check DLC (the command actually)
         and     #CANR_DLC3_|CANR_DLC2_|CANR_DLC1_|CANR_DLC0_
         cmp     #8              ; Data frame
         bne     crw_ndferr      ; Not data frame error
-        
+
         lda     CANRDSR0        ; Here is data frame, process it
         bsr     CAN_pnd
         lda     CANRDSR1
@@ -304,7 +339,7 @@ crw_dataloop                    ; Wait here for next data message
         bsr     CAN_pnd
         lda     CANRDSR7
         bsr     CAN_pnd
-        ; CS EOR packetnumber to detect data packet order change 
+        ; CS EOR packetnumber to detect data packet order change
         inc     packetnumber
         lda     checksum
         eor     packetnumber
@@ -320,7 +355,7 @@ crw_dowrite
         tst     can_derr
         bne     crw_derr
         jsr     nvm_doit        ; Do the write, return value is 0 if success
-        jsr     CAN_anserr      ; Report error or success code 
+        jsr     CAN_anserr      ; Report error or success code
         rts
 crw_cserr
         lda     #$0C            ; Checksum error code
@@ -403,9 +438,9 @@ cgnd_nodata
         rts
 cgnd_checksum
         dec     can_datalen     ; Administrate one data byte processed
-        lda     checksum 
+        lda     checksum
         rts
-        
+
 CAN_SendData
         ; Send error answer
         bsr     CAN_SendPrep
@@ -428,12 +463,12 @@ CAN_SendData
         bsr     CAN_gnd
         sta     CANTDSR7
 
-        ; CS EOR packetnumber to detect data packet order change 
+        ; CS EOR packetnumber to detect data packet order change
         inc     packetnumber
         lda     checksum
         eor     packetnumber
         sta     checksum
-        
+
         ; Set data length
         lda     #8
         sta     CANTDLR
@@ -442,7 +477,7 @@ CAN_SendData
         bsr     CAN_Send
 
         rts
-        
+
 can_readaddr
         clr     checksum
         lda     CANRDSR0        ; address hi
@@ -460,13 +495,13 @@ CAN_AckRx
         pula
         tsta
         rts
-        
+
 ; Answer subroutines
 CAN_ansnull
         bsr     CAN_AckRx
         ; Send tester present answer
         bsr     CAN_SendPrep
-        
+
         ; Message data not used
         ; Set data length
         clra
@@ -503,17 +538,21 @@ CAN_SendPrep
         lda     #1
         sta     CANTBSEL
         ; Set ID
-        ldhx    #$1CDA
-        sthx    can_idin
+        ais     #-4
+        lda     #$1C
+        sta     1,sp
+        lda     #$DA
+        sta     2,sp
         lda     diag_sa
-        sta     can_idin+2
+        sta     3,sp
         lda     ECUID
-        sta     can_idin+3
-        jsr     CAN_CalcID
-        ldhx    can_idout
+        sta     4,sp
+        jsr     CAN_SetID
+        pulhx
         sthx    CANTIDR0
-        ldhx    can_idout+2
+        pulhx
         sthx    CANTIDR2
+
         pulhx
         rts
 
@@ -523,12 +562,12 @@ CAN_Send
         sta     CANTFLG
 
         ; Wait while message is not transmitted
-CANS_waittx        
+CANS_waittx
         jsr     RTC_Handle
         lda     CANTFLG
         and     #CAN_TXE0_
         beq     CANS_waittx
-        
+
         rts
 
 
@@ -543,17 +582,17 @@ cr_broadcast    ; Services in broadcast mode
         cmp     #$22            ; Scan Network request
         jne     c_errcodeus     ; Only Scan Network request is suported
 
-        bsr     CAN_AckRx       ; Ack Rx, from now on only the answer comes
+        jsr     CAN_AckRx       ; Ack Rx, from now on only the answer comes
         bsr     CAN_SendPrep
 
         mov     #6,wr_datac     ; Set length to copy
         clrhx                   ; Clear index
 cr_scannet_loop
         lda     SERIAL_NUMBER,x ; Load number byte
-        sta     CANTDSR0,x      ; Save into Tx meessage data buffer        
+        sta     CANTDSR0,x      ; Save into Tx meessage data buffer
         aix     #1              ; Next index
         dbnz    wr_datac,cr_scannet_loop
-        
+
         lda     ECUID
         sta     CANTDSR6
         lda     #7              ; Set data length
@@ -561,7 +600,7 @@ cr_scannet_loop
         bsr     CAN_Send        ; Transmit the message
         rts
 
-cr_bcsetid_nm   ; No Match        
+cr_bcsetid_nm   ; No Match
         jsr     CAN_AckRx       ; Ack Rx, from now on only the answer comes
         rts
 cr_bcsetid
@@ -573,7 +612,7 @@ cr_bcsetid_loop
         bne     cr_bcsetid_nm   ; Skip if not match (No answer needed)
         aix     #1
         dbnz    wr_datac,cr_bcsetid_loop
-        
+
         lda     CANRDSR6	; Read new ECUID
         sta     wr_data         ; Save new ECUID into data buffer for write
 
@@ -584,7 +623,7 @@ cr_bcsetid_loop
         sta     wr_data+1       ; Save back into buffer
         mov     #6,wr_datac     ; Set length of copy
         clrhx                   ; Clear index of copy
-cbcsetid_cpy        
+cbcsetid_cpy
         lda     FINGERPR,x      ; Load fingerprint byte
         sta     wr_data+2,x     ; Save into buffer
         aix     #1
@@ -599,8 +638,8 @@ cbcsetid_cpy
         mov     #8,wr_datat     ; Set length to 2 to Write
         jsr     nvm_doit_fpok   ; Write new ECUID, no fingerprint needed
 cbcsetid_reasp
-        jsr     CAN_anserr      ; Report error or success code 
-        jsr     CAN_Init        ; Re-init CAN to update ID acceptance filter with new ECUID  
+        jsr     CAN_anserr      ; Report error or success code
+        jsr     CAN_Init        ; Re-init CAN to update ID acceptance filter with new ECUID
         rts
 
 cr_wrfp
@@ -611,14 +650,14 @@ cfngprnt_loop
         lda     CANRDSR0,x      ; Check service
         sta     wr_data,x       ; Save fingerprint byte
         add     fp_cs
-        sta     fp_cs           ; Add received byte value to checksum 
+        sta     fp_cs           ; Add received byte value to checksum
         aix     #1
         dbnz    wr_datac,cfngprnt_loop
         lda     FINGERPR+6      ; Load original update counter
         inca                    ; increase by one
         sta     wr_data+6       ; Save back into buffer
         add     fp_cs
-        sta     fp_cs           ; Add update counter value to checksum 
+        sta     fp_cs           ; Add update counter value to checksum
         lda     fp_cs           ; Load checksum of prevoius 7 bytes
         sta     wr_data+7       ; Save back into buffer
 
@@ -633,9 +672,9 @@ cfngprnt_loop
         jsr     nvm_doit_fpok   ; Write new fingerprint, no fingerprint needed
 cfngprnt_reasp
         bne     cfngprnt_err    ; Jump if fingerprint write was not successful
-        mov     #1,fpavail      ; Set flag if fingerprint is written well 
+        mov     #1,fpavail      ; Set flag if fingerprint is written well
 cfngprnt_err
-        jsr     CAN_anserr      ; Report error or success code 
+        jsr     CAN_anserr      ; Report error or success code
         rts
 
 
