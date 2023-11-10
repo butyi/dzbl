@@ -978,7 +978,7 @@ RAM                 def       $0080               ;start of 2KB RAM
 RAM_END             equ       $00FF               ;last zero-page RAM location
 
 XRAM                equ       $0F00
-XRAM_END            equ       $1000               ;last allowed RAM location
+XRAM_END            equ       $0FFF               ;last allowed RAM location
 
 #ifdef BOOTRAM_END
 RAM                 set       BOOTRAM_END         ;start of 8KB fragmented RAM
