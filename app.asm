@@ -46,6 +46,7 @@ SERIAL_NUMBER   def     $FCF8   ; Hardware serial number (6 bytes + 0x55AA)
 ; Bootloader services. These are functions to be called by 'jsr' and will return.
 KickCop         def     $EB00   ; Function to fresh watchdog without damage any register
 MEM_doit        def     $EB04   ; Function to erase or write Flash or EEPROM
+CAN_SetID       def     $EB08   ; Function to convert Phisical CAN ID to ID register value
 
 ; RAM variables
 RAMStartCnt     def     $0100   ; Teplorarily storage of EEStartCnt
@@ -263,7 +264,7 @@ CAN_Init
         sta     CANCTL1
 
         ; Enter into Initialization Mode
-        bsr     CAN_EnterInit
+        jsr     CAN_EnterInit
 
         ais     #-2             ; Reserve two bytes in stack for baud rate bytes 
 
@@ -314,12 +315,20 @@ CAN_SendA
         sta     CANTBSEL
 
         ; Set ID
+        ais     #-4
+        lda     #$18
+        sta     1,sp
         lda     #$FF
-        sta     CANTIDR+0
-        sta     CANTIDR+1        ; Set IDE and SRR
-        sta     CANTIDR+2
-        and     #$FE            ; Clear RTR bit
-        sta     CANTIDR+3
+        sta     2,sp
+        lda     #$CC
+        sta     3,sp
+        lda     ECUID
+        sta     4,sp
+        jsr     CAN_SetID
+        pulhx
+        sthx    CANTIDR
+        pulhx
+        sthx    CANTIDR+2
         
         ; Set message data
         pula

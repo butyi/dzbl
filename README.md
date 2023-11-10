@@ -327,11 +327,21 @@ This means, same bootloader shall not be downloaded into more ECUs, because seri
 To prevent this, the downloader bash command file should call the compile before each download.
 This is my solution to ensure so not be two ECU with same serial number. You can find other way too to ensure this, but do not forget!
 
-## Shared functions
+## Exported functions
+
+These functions are defined and implemented in bootloader.
+Addresses are fix. Address contains a jump to the function, therefore address can be directly
+called by bsr/jsr instructions.
+
+### Watchdog feed
+
+Function `KickCop` is shared for application to refresh software watchdog.
+Function does not modify any register value. Only register A is used, but it is saved and restored. 
+For call example, see example application `app.asm`.
 
 ### Non Volatile Memory manipulation
 
-First two bytes of Bootloader memory page is address of `MEM_doit` function.
+Function `MEM_doit` is also shared.
 Function can be called by application software to modify Flash or EEPROM.
 
 Of course, modification of bootloader pages are disabled by software.
@@ -347,6 +357,17 @@ Do not forget, if you are using `MEM_doit` service if bootloader in your applica
 do not use and do not overwrite bootloader routine in RAM address range 0x1000 - 0x107F.
 
 More details about how to use the function, refer comment part at top of file mem.asm.
+
+### CAN ID conversion from logical to phisical
+
+Function `CAN_SetID` is shared for application to convert real CAN ID to register values.
+Real (Logical) CAN ID shall be stored on stack, call the function, and converted bytes can be read out from stack.
+For call example, see example application `app.asm`.
+
+## Imported functions
+
+These functions are defined and implemented in application software, but if address is stored
+on the dedicated place of memory, like a vector, Boorloader will call and use it.
 
 ### PCB related 
 
@@ -369,7 +390,7 @@ Interface function vector for switch debug LED on. Address is 0xFFA4.
 
 Interface function vector for switch debug LED off. Address is 0xFFA6. 
 
-### System clock
+## System clock
 
 MCG module is initialized by bootloader to be bus frequency 16MHz with 4MHz quarz.
 If this is suitable for application software too, no further MCG init is needed in application software. 
