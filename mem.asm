@@ -62,9 +62,9 @@
 ;  When MEM activity is executed from RAM, both Flash and EEPROM can be manipulated.
 ;  When only EEPROM to be manipulated, code can be executed from Flash.
 ;  If Flash need to be changed while there is lack of RAM, copy MEM_inFlash to EEPROM to execute.
-; Do not cross boundaries of 768 bytes long pages!
-; Do not write more data than 768 bytes!
-; This uses RAM from 0x1000 to 0x107F for flash manipulator code
+; Do not cross boundaries of 768(Flash) or 8(EEPROM) bytes long pages!
+; Do not write more data than 768(Flash) or 8(EEPROM) bytes!
+; This uses RAM from 0x1020 to 0x107F for flash manipulator code
 
 ; ====================  EQUATES ===============================================
 BUSCLK          equ     16000000 ; Bus clock in Hz
@@ -72,7 +72,7 @@ BUSCLK          equ     16000000 ; Bus clock in Hz
 
 ; ====================  VARIABLES  ========================================
 #RAM
-MEM_inRAM       equ     $1000
+MEM_inRAM       equ     $1020   ; Note: $1000-$101F are BootAppIf
 FCMDval         ds      1       ; Local variable for FCMD
 sectnum         ds      1       ; Local variable for sector number
 lpfn            ds      1       ; Last Page Fix Needed info: 

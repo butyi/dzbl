@@ -29,6 +29,9 @@ NVOPT_VALUE     def       %11100010           ;NVFEOPT transfers to FOPT on rese
 #include "dz60.inc"             ; Load microcontroller specific register definitions
 #LISTON
 
+; RAM boot-app interface, 0x20 bytes
+BootAppIf       equ     $1000   ; Note: $1000-$101F are boot and app cross interface. This is not cleared RAM.
+
 ; Storage place of application start address
 APPADDRESS      def     $FFA0
 PCBINITADDR     def     $FFA2
@@ -51,7 +54,7 @@ EECANBAUD       def     $17E8   ; CAN CANBTR0 (SJW and BPR) and CANBTR1 (TSEG1 a
 EESCIBAUD       def     $17E0   ; SCI BaudRate setting in EEPROM. 
 
 ; Bootloader Flash area
-BL_VERSION      def     $FCF0   ; Bootloader version string
+BL_VERSION      def     $FCB0   ; Bootloader version string, 64 bytes from FCB0 to FCF0
 SERIAL_NUMBER   def     $FCF8   ; Hardware serial number (6 bytes + 0x55AA)
 
 NL              equ     $0A     ; New line character (Linux)
@@ -79,7 +82,7 @@ wr_data         ds      $80  	; 128 byte write data buffer.
 ; To be adjusted manually without overlap in dz60.inc.
         #ROM
         align 4
-        jmp     KickCop         ; Fresh watchdog without damage any register
+        bra     KickCop         ; Fresh watchdog without damage any register
         align 4
         jmp     MEM_doit        ; Address of non-volatile memory write routine
         align 4
@@ -89,7 +92,6 @@ bl_start_addr
 ;-----------------------------------------
 ; STRING
 ;-----------------------------------------
-welcome fcs     NL,"MC9S08DZ60 BootLoader (github.com/butyi/dzbl) "
 wstrid  fcs     " ID="
 sysstr  fcs     " Application is starting.",NL
 nsstr   fcs     " Application is not found. Stay in BootLoader.",NL
@@ -185,8 +187,8 @@ pcb_noinit
         lda     BLCR            ; BootLoader Configuration Register
         and     #BLCR_EW_       ; Check if welcome is enabled
         beq     no_welcome      ; if not enabled, do not print welcome string
-        ldhx    #welcome
-        jsr     SCI_puts
+        lda     #NL
+        jsr     SCI_putc
         ldhx    #BL_VERSION
         jsr     SCI_puts
         ldhx    #wstrid
@@ -245,7 +247,7 @@ issys
         jsr     SCI_puts 
 no_sysstr
 
-        ; Clear RAM and XRAM - except MEM_inRAM in range $1000-$107F - for application software
+        ; Clear RAM and XRAM - except BootAppIf and MEM_inRAM in range $1000-$107F - for application software
         ldhx    #RAM
 issys_clrloop 
         clr     ,x
@@ -365,9 +367,11 @@ bl_remaining    equ     $FCF0-1-bl_end_addr
 ; Bootloader version string. 7 characters reserved plus string terminator zero
         org     BL_VERSION
 blverstart
-        db      "V0.00",0
+                ;0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF
+        db      "MC9S08DZ60 BootLoader (https://github.com/butyi/dzbl) V0.01"
 blverlen        equ     $-blverstart
-#if 8 < blverlen
+        db      0
+#if 64 < blverlen
   #Error Bootloader version string is too long: {blverlen(0)}
 #endif
 

@@ -112,7 +112,7 @@ loop
         ldhx    #$7FFF
 wait
         jsr     KickCop         ; Fresh watchdog
-        brset	5,$3C,scirxev   ; Framing error (break character)
+        brset	5,$3C,scirxev   ; Check if character received
 
         lda     #10
 wait2
