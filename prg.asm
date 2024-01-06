@@ -368,7 +368,7 @@ bl_remaining    equ     $FCF0-1-bl_end_addr
         org     BL_VERSION
 blverstart
                 ;0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF
-        db      "MC9S08DZ60 BootLoader (https://github.com/butyi/dzbl) V0.01"
+        db      "MC9S08DZ60 BootLoader (https://github.com/butyi/dzbl) V0.02"
 blverlen        equ     $-blverstart
         db      0
 #if 64 < blverlen

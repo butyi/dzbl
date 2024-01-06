@@ -74,7 +74,7 @@ can_btr_ok
 
         ; 0-3: 1CDA0B55 (target specific), 4-7: 1CDAFF55 (broadcast)
         ais     #-4
-        lda     #$1C
+        lda     #$9C            ; MSB is for extended frame
         sta     1,sp
         lda     #$DA
         sta     2,sp
@@ -88,7 +88,7 @@ can_btr_ok
         sthx    CANIDAR2
 
         ais     #-4
-        lda     #$1C
+        lda     #$8C            ; MSB is for extended frame
         sta     1,sp
         lda     #$DA
         sta     2,sp
@@ -162,16 +162,42 @@ CAN_Deinit
 
 ; Calculates ID register bytes (RAW) from simple 29bit value (PHYS) to set ID registers
 CAN_SetID
-        ;
-        ; simple 29 bits        3,sp        4,sp        5,sp        6,sp
-        ;                       ---3 3333   2222 2222   1111 1111   0000 0000
-        ; register bytes
-        ;                       3333 3222   222s i221   1111 1110   0000 000r
-
-        ; sp1,2 are return address
-
         ; Prio (bit24-3)
         lda     3,sp
+        bmi     CANsi_ext
+        ; Standard CAN ID
+        ; input 11 bits         3,sp        4,sp        5,sp        6,sp
+        ;  (i=IDE,r=RTR)        i--- ----   ---- ----   ---- -111   0000 0000
+        ; register bytes
+        ;                       1110 0000   000r i---   ---- ----   ---- ----
+        ; sp1,2 are return address
+        lda     5,sp
+        nsa
+        lsla
+        and     #$E0
+        sta     3,sp            ; 111- ----
+
+        lda     6,sp
+        lsra
+        lsra
+        lsra                    ; ---0 0000
+        ora     3,sp            ; 111- ----
+        sta     3,sp            ; 1110 0000
+
+        lda     6,sp
+        nsa
+        lsla
+        and     #$E0            ; Clear RTR and IDE
+        sta     4,sp
+
+        rts
+CANsi_ext
+        ; Extended CAN ID
+        ; input 29 bits         3,sp        4,sp        5,sp        6,sp
+        ;  (i=IDE,r=RTR,s=SRR)  i--3 3333   2222 2222   1111 1111   0000 0000
+        ; register bytes
+        ;                       3333 3222   222s i221   1111 1110   0000 000r
+        ; sp1,2 are return address
         lsla
         lsla
         lsla
@@ -539,7 +565,7 @@ CAN_SendPrep
         sta     CANTBSEL
         ; Set ID
         ais     #-4
-        lda     #$1C
+        lda     #$9C            ; MSB is for extended frame
         sta     1,sp
         lda     #$DA
         sta     2,sp
